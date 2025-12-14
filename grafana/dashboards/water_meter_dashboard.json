@@ -1,0 +1,49 @@
+{
+  "dashboard": {
+    "title": "Учет воды - Автоматический",
+    "tags": ["вода", "авто"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Текущие показания",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "datasource": "PostgreSQL",
+        "targets": [
+          {
+            "rawSql": "SELECT name, value FROM water_counter ORDER BY id",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cubicm",
+            "decimals": 3,
+            "color": {"mode": "thresholds"}
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Расход воды по дням",
+        "type": "timeseries",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+        "datasource": "PostgreSQL",
+        "targets": [
+          {
+            "rawSql": "SELECT DATE(time) as time, COUNT(*) * 10 as value, 'Холодная вода' as metric FROM water_meter_log WHERE id_sensor = 1 GROUP BY DATE(time) UNION ALL SELECT DATE(time) as time, COUNT(*) * 10 as value, 'Горячая вода' as metric FROM water_meter_log WHERE id_sensor = 2 GROUP BY DATE(time)",
+            "format": "time_series"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "litre",
+            "decimals": 0
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

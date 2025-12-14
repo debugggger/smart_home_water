@@ -1,0 +1,90 @@
+networks:
+  smart_home_network:
+    driver: bridge
+
+services:
+
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart_home_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+       - ./postgres_data:/var/lib/postgresql/data
+       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - smart_home_network
+
+  # MQTT брокер
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: smart_home_mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+    networks:
+      - smart_home_network
+
+  # Основное приложение
+  app:
+    build: .
+    container_name: smart_home_app
+    depends_on:
+      - postgres
+      - mosquitto
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=${API_PORT}
+    ports:
+      - "17538:5000"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    command: python main.py
+    networks:
+      - smart_home_network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smart_home_grafana
+    depends_on:
+      - postgres
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "19768:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - smart_home_network
+
+
+volumes:
+  grafana_data:
+    driver: local
+
+#volumes:
+#  postgres_data:

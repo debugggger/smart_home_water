@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Учет воды - Показания счетчиков</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <h1>Показания счетчиков воды</h1>
+
+    <div>
+        <h2>Текущие показания:</h2>
+        <button onclick="loadCurrentReadings()">Получить данные</button>
+        <div id="currentReadings">
+            Нажмите кнопку "Получить данные"
+        </div>
+    </div>
+
+    <hr>
+
+    <div>
+        <h2>Расчет расхода за период:</h2>
+
+        <form id="periodForm">
+            <table>
+                <tr>
+                    <td>Начало периода:</td>
+                    <td>
+                        <input type="datetime-local" id="startTime" required>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Конец периода:</td>
+                    <td>
+                        <input type="datetime-local" id="endTime" required>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Счетчик (оставьте пустым для всех):</td>
+                    <td>
+                        <select id="counterId">
+                            <option value="">Все счетчики</option>
+                            <option value="1">Холодная вода</option>
+                            <option value="2">Горячая вода</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td>
+                        <button type="submit">Рассчитать расход</button>
+                        <button type="button" onclick="fillCurrentTime()">Текущее время</button>
+                    </td>
+                </tr>
+            </table>
+        </form>
+
+        <div id="consumptionResult" style="margin-top: 20px; border: 1px solid #ccc; padding: 10px; display: none;">
+            <h3>Результат расчета:</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <hr>
+
+    <div>
+        <h2>Управление:</h2>
+        <button onclick="resetCounter(1)">Сбросить холодную воду</button>
+        <button onclick="resetCounter(2)">Сбросить горячую воду</button>
+        <div id="resetResult" style="margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        // Установить текущее время в форму
+        function fillCurrentTime() {
+            const now = new Date();
+            const endTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+            // Конец периода - текущее время
+            document.getElementById('endTime').value = endTime;
+
+            // Начало периода - 1 час назад
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+            const startTime = new Date(oneHourAgo.getTime() - (oneHourAgo.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+            document.getElementById('startTime').value = startTime;
+        }
+
+        // Загрузить текущие показания
+        async function loadCurrentReadings() {
+            const button = event.target;
+            const displayDiv = document.getElementById('currentReadings');
+
+            try {
+                button.disabled = true;
+                button.textContent = 'Загрузка...';
+                displayDiv.textContent = 'Загрузка данных...';
+
+                const response = await fetch('/api/current');
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.data && data.data.length > 0) {
+                        let html = '<table border="1" cellpadding="5" style="border-collapse: collapse;">';
+                        html += '<tr><th>ID</th><th>Счетчик</th><th>Показание (м³)</th><th>Время обновления</th></tr>';
+
+                        data.data.forEach(counter => {
+                            const time = new Date(counter.last_time).toLocaleString('ru-RU');
+                            html += `<tr>
+                                <td>${counter.id}</td>
+                                <td><b>${counter.name}</b></td>
+                                <td><b>${parseFloat(counter.value).toFixed(3)}</b> м³</td>
+                                <td>${time}</td>
+                            </tr>`;
+                        });
+
+                        html += '</table>';
+                        displayDiv.innerHTML = html;
+                    } else {
+                        displayDiv.innerHTML = 'Нет данных в базе';
+                    }
+                } else {
+                    displayDiv.innerHTML = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке:', error);
+                displayDiv.innerHTML = 'Ошибка загрузки: ' + error.message;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Получить данные';
+            }
+        }
+
+        // Сброс счетчика
+        async function resetCounter(counterId) {
+            const displayDiv = document.getElementById('resetResult');
+            const counterName = counterId === 1 ? 'холодную воду' : 'горячую воду';
+
+            if (!confirm(`Вы уверены, что хотите сбросить ${counterName}?`)) {
+                return;
+            }
+
+            try {
+                displayDiv.textContent = 'Сброс...';
+
+                const response = await fetch(`/api/counter/reset/${counterId}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayDiv.innerHTML = `<span style="color: green">Счетчик сброшен успешно!</span><br>
+                                          Старое значение: ${data.data.old_value.toFixed(3)} м³ → Новое: ${data.data.new_value.toFixed(3)} м³`;
+                    // Обновляем текущие показания
+                    loadCurrentReadings();
+                } else {
+                    displayDiv.innerHTML = `<span style="color: red">Ошибка: ${data.error || 'Неизвестная ошибка'}</span>`;
+                }
+            } catch (error) {
+                console.error('Ошибка при сбросе:', error);
+                displayDiv.innerHTML = `<span style="color: red">Ошибка: ${error.message}</span>`;
+            }
+        }
+
+        // Обработка формы расчета расхода
+        document.getElementById('periodForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            const counterId = document.getElementById('counterId').value;
+
+            if (!startTime || !endTime) {
+                alert('Заполните все поля даты и времени');
+                return;
+            }
+
+            const startDateTime = new Date(startTime);
+            const endDateTime = new Date(endTime);
+
+            if (startDateTime >= endDateTime) {
+                alert('Начало периода должно быть раньше конца периода');
+                return;
+            }
+
+            try {
+                const resultDiv = document.getElementById('consumptionResult');
+                const contentDiv = document.getElementById('resultContent');
+
+                contentDiv.textContent = 'Расчет расхода...';
+                resultDiv.style.display = 'block';
+
+                const requestData = {
+                    start_time: startDateTime.toISOString(),
+                    end_time: endDateTime.toISOString()
+                };
+
+                if (counterId) {
+                    requestData.counter_id = parseInt(counterId);
+                }
+
+                const response = await fetch('/api/consumption/period', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    let html = '<table border="1" cellpadding="5" style="border-collapse: collapse;">';
+
+                    if (counterId) {
+                        // Результат для одного счетчика
+                        const result = data.data;
+                        html += `
+                            <tr><th>Параметр</th><th>Значение</th></tr>
+                            <tr><td>Счетчик</td><td>ID: ${result.counter_id}</td></tr>
+                            <tr><td>Период</td><td>${new Date(result.start_time).toLocaleString('ru-RU')} - ${new Date(result.end_time).toLocaleString('ru-RU')}</td></tr>
+                            <tr><td>Количество импульсов</td><td>${result.pulse_count}</td></tr>
+                            <tr><td>Расход</td><td><b>${result.consumption_m3.toFixed(3)} м³</b> (${result.consumption_liters.toFixed(1)} литров)</td></tr>
+                        `;
+                    } else {
+                        // Результат для всех счетчиков
+                        html += '<tr><th>Счетчик</th><th>Импульсы</th><th>Расход (м³)</th><th>Расход (литры)</th><th>Текущее показание</th></tr>';
+
+                        data.data.forEach(result => {
+                            html += `<tr>
+                                <td><b>${result.counter_name}</b> (ID: ${result.counter_id})</td>
+                                <td>${result.pulse_count}</td>
+                                <td><b>${result.consumption_m3.toFixed(3)}</b> м³</td>
+                                <td>${result.consumption_liters.toFixed(1)} л</td>
+                                <td>${result.current_value.toFixed(3)} м³</td>
+                            </tr>`;
+                        });
+                    }
+
+                    html += '</table>';
+                    contentDiv.innerHTML = html;
+                } else {
+                    contentDiv.innerHTML = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
+                }
+            } catch (error) {
+                console.error('Ошибка расчета:', error);
+                document.getElementById('resultContent').innerHTML = 'Ошибка: ' + error.message;
+            }
+        });
+
+        // Автозаполнение формы текущим временем при загрузке страницы
+        window.onload = function() {
+            fillCurrentTime();
+        };
+    </script>
+</body>
+</html>
