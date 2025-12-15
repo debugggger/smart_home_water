@@ -7,7 +7,7 @@ services:
 
   # PostgreSQL
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     container_name: smart_home_db
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -19,7 +19,6 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
-    user: "1001:1001"
     networks:
       - smart_home_network
 
