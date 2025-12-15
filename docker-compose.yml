@@ -19,6 +19,7 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
+    user: "1001:1001"
     networks:
       - smart_home_network
 
