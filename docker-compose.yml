@@ -62,7 +62,7 @@ services:
 
   # Grafana
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.1
     container_name: smart_home_grafana
     depends_on:
       - postgres
