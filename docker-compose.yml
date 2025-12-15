@@ -85,6 +85,4 @@ services:
 volumes:
   grafana_data:
     driver: local
-
-#volumes:
-#  postgres_data:
+  postgres_data:
